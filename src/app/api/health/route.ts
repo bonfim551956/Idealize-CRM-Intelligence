@@ -7,7 +7,12 @@ import { rowsOf } from "@/server/metrics";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const clean = (e: unknown) => String((e as Error)?.message ?? e).replace(/postgres(ql)?:\/\/[^\s]+/g, "[url]").slice(0, 300);
+const msg = (e: unknown): string => {
+  const err = e as Error & { cause?: unknown; code?: string };
+  const own = `${err?.code ? err.code + " " : ""}${err?.message ?? String(e)}`;
+  return err?.cause ? `${own} | causa: ${msg(err.cause)}` : own;
+};
+const clean = (e: unknown) => msg(e).replace(/postgres(ql)?:\/\/[^\s]+/g, "[url]").slice(0, 500);
 
 /** Verifica a conexão com o banco (sem expor credenciais). Se o pooler estiver errado, testa o alternativo e diz qual usar. */
 export async function GET() {
@@ -18,6 +23,7 @@ export async function GET() {
     return NextResponse.json({ ok: true, db: "ok", etapas: r[0]?.n ?? 0, modo: url ? "postgres" : "local" });
   } catch (e) {
     const out: Record<string, unknown> = { ok: false, db: "erro", detalhe: clean(e) };
+    out.versao = 2;
     const m = url?.match(/aws-(\d)-([a-z0-9-]+)\.pooler\.supabase\.com/);
     if (m) {
       const alt = url!.replace(`aws-${m[1]}-`, `aws-${m[1] === "0" ? "1" : "0"}-`);
