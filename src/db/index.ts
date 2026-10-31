@@ -13,7 +13,11 @@ const g = globalThis as unknown as { __db?: DB; __pglite?: PGlite };
 export function createDb(opts: { url?: string; dataDir?: string } = {}): { db: DB; pglite?: PGlite } {
   const url = opts.url ?? process.env.DATABASE_URL;
   if (url) {
-    const client = postgres(url, { max: 5, prepare: false });
+    // O pooler do Supabase em modo transação (porta 6543) trava quando várias consultas
+    // são enviadas em paralelo na mesma conexão (pipelining do postgres.js). O modo sessão
+    // (porta 5432, mesmo host, IPv4) não tem essa limitação.
+    const finalUrl = url.replace(/(\.pooler\.supabase\.com):6543\//, "$1:5432/");
+    const client = postgres(finalUrl, { max: 3, prepare: false, idle_timeout: 20, connect_timeout: 10 });
     return { db: drizzlePg(client, { schema }) as unknown as DB };
   }
   const pglite = new PGlite(opts.dataDir ?? process.env.PGLITE_DIR ?? "./.data/pglite");
